@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dropzone — Mini Battle Royale</title>
+<style>
+:root{--lime:#c7ff42;--ink:#101820;--panel:#16242d}
+*{box-sizing:border-box}body{margin:0;background:#0c151c;color:#f4f7f8;font:15px system-ui,-apple-system,Segoe UI,sans-serif}
+header{display:flex;align-items:center;justify-content:space-between;padding:16px 5vw;border-bottom:1px solid #293841;background:#111d25}
+.logo{font-weight:1000;letter-spacing:2px;font-size:22px}.logo span{color:var(--lime)}.tag{font-size:12px;color:#9fb1bb}
+main{max-width:1100px;margin:24px auto;padding:0 16px;display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:16px}
+.gamewrap{position:relative;background:#8bd5dd;border:2px solid #344650;border-radius:14px;overflow:hidden;min-height:420px}
+canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#0b1824c9;text-align:center;padding:20px}
+.overlay h1{font-size:clamp(28px,5vw,48px);margin:0 0 8px;font-weight:1000;letter-spacing:-1px}.overlay p{max-width:440px;line-height:1.5;color:#c7d3da}
+button{border:0;border-radius:8px;padding:12px 18px;background:var(--lime);color:#15200c;font-weight:900;cursor:pointer}button:hover{filter:brightness(1.08)}.hidden{display:none!important}
+.side{background:var(--panel);border:1px solid #344650;border-radius:14px;padding:18px;height:max-content}.side h2{font-size:14px;text-transform:uppercase;letter-spacing:1.3px;margin:0 0 14px;color:var(--lime)}
+.stat{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a3a44}.stat b{font-variant-numeric:tabular-nums}
+.help{font-size:13px;color:#b7c7ce;line-height:1.7}.key{display:inline-block;background:#263943;border:1px solid #4b626e;border-radius:4px;padding:0 5px;color:#fff;font-size:12px}
+.bar{height:9px;background:#31434c;border-radius:8px;overflow:hidden;margin:7px 0 14px}.bar span{display:block;height:100%;width:100%;background:var(--lime)}
+footer{text-align:center;color:#7f949e;font-size:12px;padding:10px 20px 26px}
+@media(max-width:780px){main{grid-template-columns:1fr}.side{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}.gamewrap{min-height:260px}}
+</style></head>
+<body>
+<header><div class="logo">DROP<span>ZONE</span></div><div class="tag">BROWSER MINI BATTLE ROYALE · BUILD 01</div></header>
+<main>
+<section class="gamewrap">
+<canvas id="game" width="800" height="500" aria-label="Playable top-down perspective battle royale game"></canvas>
+<div id="start" class="overlay"><div><div style="font-size:13px;color:#c7ff42;font-weight:900;letter-spacing:3px">LAST PLAYER STANDING</div><h1>DROPZONE</h1><p>Explore a bright little island, collect supply crates, and outlast the training bots. A mini battle royale you can play right in your browser.</p><button id="startBtn">DROP IN</button></div></div>
+<div id="end" class="overlay hidden"><div><h1 id="endTitle">MATCH OVER</h1><p id="endText"></p><button id="againBtn">PLAY AGAIN</button></div></div>
+</section>
+<aside class="side"><div><h2>Match status</h2><div class="stat"><span>Players left</span><b id="left">9</b></div><div class="stat"><span>Supplies</span><b id="supplies">0</b></div><div class="stat"><span>Health</span><b id="healthNum">100</b></div><div class="bar"><span id="healthBar"></span></div><div class="stat"><span>Storm radius</span><b id="storm">100%</b></div></div><div><h2>Controls</h2><p class="help"><span class="key">W</span> <span class="key">A</span> <span class="key">S</span> <span class="key">D</span> Move<br><span class="key">↑</span> <span class="key">←</span> <span class="key">↓</span> <span class="key">→</span> also move<br><span class="key">Mouse</span> Aim<br><span class="key">Click</span> or <span class="key">Space</span> Fire<br><br>Collect glowing supply crates for health. Stay inside the shrinking safe zone!</p><button id="restart" style="width:100%;margin-top:8px">Restart match</button></div></aside>
+</main><footer>Original browser game prototype. No downloads, accounts, or external libraries required.</footer>
+<script>
+(()=>{
+const c=document.getElementById('game'),ctx=c.getContext('2d'),W=c.width,H=c.height;
+const ui={start:document.getElementById('start'),end:document.getElementById('end'),left:document.getElementById('left'),sup:document.getElementById('supplies'),hp:document.getElementById('healthNum'),bar:document.getElementById('healthBar'),storm:document.getElementById('storm')};
+let keys={},mouse={x:W/2+70,y:H/2,down:false},player,bots,crates,shots,trees,rocks,active=false,over=false,frame=0,supply=0,stormR=350,spawnTimer=0;
+function rand(a,b){return a+Math.random()*(b-a)}
+function reset(){player={x:W/2,y:H/2,hp:100,angle:0,cool:0,inv:0};bots=Array.from({length:8},(_,i)=>({x:rand(70,W-70),y:rand(60,H-60),hp:50,alive:true,angle:0,cool:rand(30,100),hue:i%2?'#ff795f':'#b58cff'}));crates=Array.from({length:13},()=>({x:rand(45,W-45),y:rand(45,H-45),taken:false,bob:rand(0,7)}));shots=[];trees=Array.from({length:32},()=>({x:rand(25,W-25),y:rand(25,H-25),s:rand(.7,1.3)}));rocks=Array.from({length:16},()=>({x:rand(20,W-20),y:rand(20,H-20),s:rand(.6,1.4)}));active=false;over=false;frame=0;supply=0;stormR=350;ui.left.textContent='9';ui.sup.textContent='0';ui.hp.textContent='100';ui.bar.style.width='100%';ui.storm.textContent='100%';ui.end.classList.add('hidden');ui.start.classList.remove('hidden');draw()}
+function start(){if(over)reset();active=true;over=false;ui.start.classList.add('hidden');ui.end.classList.add('hidden');last=performance.now();requestAnimationFrame(loop)}
+function finish(win){active=false;over=true;document.getElementById('endTitle').textContent=win?'VICTORY ROYALE!':'MATCH OVER';document.getElementById('endText').textContent=win?'You are the last player standing. Nice work!':'The bots got you this time. Drop back in and try again.';ui.end.classList.remove('hidden')}
+function fire(from,to,isPlayer){let a=Math.atan2(to.y-from.y,to.x-from.x);shots.push({x:from.x+Math.cos(a)*15,y:from.y+Math.sin(a)*15,vx:Math.cos(a)*7.5,vy:Math.sin(a)*7.5,life:55,owner:isPlayer?'p':'b',damage:isPlayer?26:9})}
+function update(){
+ frame++;if(frame%600===0)stormR=Math.max(90,stormR-25);
+ const speed=2.8;let dx=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0),dy=(keys.s||keys.arrowdown?1:0)-(keys.w||keys.arrowup?1:0);if(dx&&dy){dx*=.707;dy*=.707}
+ player.x=Math.max(15,Math.min(W-15,player.x+dx*speed));player.y=Math.max(15,Math.min(H-15,player.y+dy*speed));player.angle=Math.atan2(mouse.y-player.y,mouse.x-player.x);player.cool=Math.max(0,player.cool-1);player.inv=Math.max(0,player.inv-1);
+ if((mouse.down||keys[' '])&&player.cool===0){fire(player,mouse,true);player.cool=13}
+ for(const b of bots){if(!b.alive)continue;let d=Math.hypot(player.x-b.x,player.y-b.y),a=Math.atan2(player.y-b.y,player.x-b.x);b.angle=a;
+  if(d>135){b.x+=Math.cos(a)*1.05;b.y+=Math.sin(a)*1.05}else if(d<78){b.x-=Math.cos(a)*.8;b.y-=Math.sin(a)*.8}else{b.x+=Math.cos(a+Math.PI/2)*.45;b.y+=Math.sin(a+Math.PI/2)*.45}
+  b.x=Math.max(14,Math.min(W-14,b.x));b.y=Math.max(14,Math.min(H-14,b.y));b.cool--;if(d<300&&b.cool<=0){fire(b,player,false);b.cool=rand(65,110)}
+  if(Math.hypot(b.x-W/2,b.y-H/2)>stormR){b.hp-=.08;if(b.hp<=0)b.alive=false}
+ }
+ for(const s of shots){s.x+=s.vx;s.y+=s.vy;s.life--;if(s.owner==='p'){for(const b of bots){if(b.alive&&Math.hypot(s.x-b.x,s.y-b.y)<15){b.hp-=s.damage;s.life=0;if(b.hp<=0)b.alive=false;break}}}else if(Math.hypot(s.x-player.x,s.y-player.y)<15&&player.inv===0){player.hp-=s.damage;s.life=0;player.inv=12}}
+ shots=shots.filter(s=>s.life>0&&s.x>-5&&s.x<W+5&&s.y>-5&&s.y<H+5);
+ for(const q of crates){q.bob+=.06;if(!q.taken&&Math.hypot(q.x-player.x,q.y-player.y)<24){q.taken=true;supply++;player.hp=Math.min(100,player.hp+22)}}
+ if(Math.hypot(player.x-W/2,player.y-H/2)>stormR){if(frame%20===0)player.hp-=2}
+ const alive=bots.filter(b=>b.alive).length;ui.left.textContent=alive+1;ui.sup.textContent=supply;ui.hp.textContent=Math.max(0,Math.ceil(player.hp));ui.bar.style.width=Math.max(0,player.hp)+'%';ui.storm.textContent=Math.round(stormR/3.5)+'%';
+ if(player.hp<=0){finish(false);return}if(alive===0){finish(true);return}
+}
+function ellipse(x,y,rx,ry,color){ctx.fillStyle=color;ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);ctx.fill()}
+function draw(){
+ ctx.clearRect(0,0,W,H);ctx.fillStyle='#83c98d';ctx.fillRect(0,0,W,H);
+ // softly patterned terrain
+ for(let y=0;y<H;y+=42)for(let x=0;x<W;x+=42){ctx.fillStyle=((x+y)/42)%2?'#8bd195':'#80c68a';ctx.fillRect(x,y,42,42)}
+ // paths and pond
+ ctx.fillStyle='#d8c88e';ctx.beginPath();ctx.moveTo(0,365);ctx.quadraticCurveTo(230,250,420,360);ctx.quadraticCurveTo(590,455,800,290);ctx.lineTo(800,325);ctx.quadraticCurveTo(590,490,410,395);ctx.quadraticCurveTo(230,285,0,400);ctx.fill();
+ ellipse(150,110,80,48,'#5bbec9');ellipse(150,105,73,41,'#72d4df');
+ for(const r of rocks){ellipse(r.x+3,r.y+5,9*r.s,6*r.s,'#6a9a70');ellipse(r.x,r.y,9*r.s,6*r.s,'#b4c5ae')}
+ for(const t of trees){ellipse(t.x+4,t.y+7,13*t.s,7*t.s,'#609b68');ctx.fillStyle='#4c8c5b';ctx.beginPath();ctx.moveTo(t.x,t.y-17*t.s);ctx.lineTo(t.x-13*t.s,t.y+8*t.s);ctx.lineTo(t.x+13*t.s,t.y+8*t.s);ctx.fill();ctx.fillStyle='#5aa56b';ctx.beginPath();ctx.moveTo(t.x,t.y-22*t.s);ctx.lineTo(t.x-9*t.s,t.y+3*t.s);ctx.lineTo(t.x+10*t.s,t.y+3*t.s);ctx.fill()}
+ // storm boundary
+ ctx.save();ctx.beginPath();ctx.rect(0,0,W,H);ctx.arc(W/2,H/2,stormR,0,Math.PI*2,true);ctx.fillStyle='#8a77ff22';ctx.fill('evenodd');ctx.strokeStyle='#9d89ff';ctx.lineWidth=3;ctx.setLineDash([9,8]);ctx.beginPath();ctx.arc(W/2,H/2,stormR,0,Math.PI*2);ctx.stroke();ctx.restore();
+ for(const q of crates){if(q.taken)continue;let by=Math.sin(q.bob)*3;ctx.save();ctx.shadowColor='#c7ff42';ctx.shadowBlur=15;ctx.fillStyle='#c7ff42';ctx.fillRect(q.x-9,q.y-8+by,18,16);ctx.restore();ctx.strokeStyle='#547a23';ctx.lineWidth=2;ctx.strokeRect(q.x-9,q.y-8+by,18,16);ctx.fillStyle='#34491c';ctx.fillRect(q.x-2,q.y-8+by,4,16)}
+ for(const s of shots){ellipse(s.x,s.y,4,4,s.owner==='p'?'#fff38a':'#ff8b74')}
+ if(player){for(const b of bots){if(!b.alive)continue;ellipse(b.x,b.y+5,13,7,'#477454');ctx.save();ctx.translate(b.x,b.y);ctx.rotate(b.angle);ctx.fillStyle='#34404b';ctx.fillRect(0,-4,19,8);ctx.restore();ellipse(b.x,b.y,10,11,b.hue);ellipse(b.x+2,b.y-2,4,4,'#f7e7d6');if(b.hp<50){ctx.fillStyle='#253b36';ctx.fillRect(b.x-12,b.y-18,24,3);ctx.fillStyle='#ff7c68';ctx.fillRect(b.x-12,b.y-18,24*Math.max(0,b.hp)/50,3)}}
+  ellipse(player.x,player.y+6,14,8,'#477454');ctx.save();ctx.translate(player.x,player.y);ctx.rotate(player.angle);ctx.fillStyle='#263744';ctx.fillRect(0,-5,23,10);ctx.fillStyle='#c7ff42';ctx.fillRect(0,-3,16,6);ellipse(0,0,11,12,player.inv>0?'#ffffff': '#4b83ff');ellipse(3,-3,4,4,'#e6f5ff');ctx.restore();
+ }
+ // compact in-game label
+ ctx.fillStyle='#14262bcc';ctx.fillRect(12,12,168,30);ctx.fillStyle='#f4f7f8';ctx.font='bold 13px system-ui';ctx.fillText('DROPZONE ISLAND',22,32);
+}
+let last=0;function loop(now){if(!active)return;let dt=Math.min(40,now-last);last=now;if(dt>0)update();draw();if(active)requestAnimationFrame(loop)}
+c.addEventListener('mousemove',e=>{let r=c.getBoundingClientRect();mouse.x=(e.clientX-r.left)*W/r.width;mouse.y=(e.clientY-r.top)*H/r.height});
+c.addEventListener('mousedown',()=>mouse.down=true);window.addEventListener('mouseup',()=>mouse.down=false);
+window.addEventListener('keydown',e=>{let k=e.key.toLowerCase();keys[k]=true;if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(k))e.preventDefault();if(k===' '&&active&&player.cool===0){fire(player,mouse,true);player.cool=13}});
+window.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+document.getElementById('startBtn').onclick=()=>{if(!player)reset();start()};document.getElementById('againBtn').onclick=()=>{reset();start()};document.getElementById('restart').onclick=()=>{reset();start()};
+reset();
+})();
+</script></body></html>
